@@ -1,0 +1,98 @@
+function sendDailyTaskReminder() {
+
+  const SEND_TO = 'あなたのgmail@gmail.com';
+
+  const hour = new Date().getHours();
+
+  // =========================
+  // 時間帯による切り替え
+  // =========================
+  const isMorning = hour >= 4 && hour < 12;
+
+  const titleText = isMorning
+    ? 'DID YOU FINISH TASK?'
+    : 'WHAT DID YOU COMPLETE TODAY?';
+
+  const backgroundStyle = isMorning
+    ? 'linear-gradient(135deg, #e6f4ff, #f3e8ff)'
+    : 'linear-gradient(135deg, #f3e8ff, #ede9fe)';
+
+  // =========================
+  // 名言を3つ取得（ZenQuotes）
+  // =========================
+  const quotes = fetchThreeZenQuotes();
+
+  const quoteHtml = quotes.map(q =>
+    `<p style="font-style: italic; margin: 6px 0;">"${q}"</p>`
+  ).join('');
+
+  // =========================
+  // HTML本文
+  // =========================
+  const htmlBody = `
+  <div style="
+    background: ${backgroundStyle};
+    padding: 26px;
+    font-family: Arial, sans-serif;
+    border-radius: 16px;
+  ">
+
+    <div style="margin-bottom:20px;">
+      ${quoteHtml}
+    </div>
+
+    <h2 style="
+      color: #d32f2f;
+      margin-bottom: 12px;
+    ">
+      <b>${titleText}</b>
+    </h2>
+
+    <div style="font-size:15px; line-height:1.8;">
+      ☑ WALKING<br>
+      ☑ PUSH-UP<br>
+      ☑ ABS<br>
+      ☑ CHECK NEWS<br>
+      ☑ STUDY<br>
+      ☑ CREATE VIDEO
+    </div>
+
+    <div style="margin-top:26px; font-size:13px;">
+      ────────────────<br>
+      Trusted News Sources<br>
+      BBC : https://www.bbc.com/news<br>
+      CNN : https://edition.cnn.com<br>
+      Economist : https://www.economist.com<br>
+      ────────────────
+    </div>
+
+  </div>
+  `;
+
+  // =========================
+  // Gmail送信
+  // =========================
+  GmailApp.sendEmail(
+    SEND_TO,
+    'Daily Task Reminder',
+    'HTMLメール対応環境でご確認ください。',
+    { htmlBody }
+  );
+}
+
+
+/* =========================
+   ZenQuotes API（3つ）
+========================= */
+function fetchThreeZenQuotes() {
+
+  const quotes = [];
+
+  for (let i = 0; i < 3; i++) {
+    const res = UrlFetchApp.fetch('https://zenquotes.io/api/random');
+    const data = JSON.parse(res.getContentText());
+    quotes.push(data[0].q);
+  }
+
+  return quotes;
+}
