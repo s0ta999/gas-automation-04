@@ -1,0 +1,132 @@
+function sendDailyTaskReminder() {
+  const SEND_TO = 'sota.mr999@gmail.com';
+  const TASKS = ['WALKING','PUSH-UP','ABS','CHECK NEWS','STUDY','CREATE VIDEO'];
+
+  const now = new Date();
+  const hour = now.getHours();
+  const isMorning = hour >= 4 && hour < 12;
+
+  // ===== スプレッドシート取得 =====
+  const ss = SpreadsheetApp.openById('109aHvkds_wcFHWayTbVzTR9tJZLf8dH3li3-XZOtOWk');
+  const formSheet = ss.getSheetByName('Form_Responses');
+  const summarySheet = ss.getSheetByName('Daily_Summary');
+
+  const data = formSheet.getDataRange().getValues();
+  if (data.length < 2) return; // データなし
+  const headers = data[0];
+
+  const timestampIndex = headers.indexOf('Timestamp');
+  const taskIndex = headers.indexOf('What did you complete today?'); // B列
+  const messageIndex = headers.indexOf('Message For Tomorrow'); // C列
+
+  // ===== 最新の非空メッセージ行を探す（朝夜関係なし） =====
+  let messageForTomorrow = 'No Message';
+  let messageTimestamp = null;
+  for (let i = data.length - 1; i >= 1; i--) {
+    const row = data[i];
+    const msg = row[messageIndex];
+    if (msg && msg.toString().trim() !== '') {
+      messageForTomorrow = msg.toString().trim();
+      messageTimestamp = new Date(row[timestampIndex]);
+      break; // 最新1件を取得
+    }
+  }
+
+  // ===== メッセージが2日以上前ならNo Message =====
+  if (messageTimestamp) {
+    const diffTime = now.getTime() - messageTimestamp.getTime();
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    if (diffDays >= 2) {
+      messageForTomorrow = 'No Message';
+    }
+  }
+
+  // ===== 最新行のタスク達成状況 =====
+  let completedTasks = new Set();
+  const lastRow = data[data.length - 1];
+  if (lastRow[taskIndex] && lastRow[taskIndex].toString().trim() !== '') {
+    lastRow[taskIndex].toString().split(',').forEach(t => completedTasks.add(t.trim()));
+  }
+
+  const completedCount = completedTasks.size;
+  const totalCount = TASKS.length;
+  const rate = isMorning ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // ===== 名言取得 =====
+  const quotes = [];
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = UrlFetchApp.fetch('https://zenquotes.io/api/random');
+      const q = JSON.parse(res.getContentText())[0];
+      quotes.push(q.q + ' —' + q.a);
+    } catch {
+      quotes.push('Stay positive and keep going! —Unknown');
+    }
+  }
+
+  // ===== メール本文 =====
+  const morningGradient = 'linear-gradient(to bottom, #bae6fd 45%, #E2CBE8 55%)';
+  const eveningGradient = 'linear-gradient(to bottom, #E2CBE8 45%, #bae6fd 55%)';
+  const background = isMorning ? morningGradient : eveningGradient;
+
+  let body = `<div style="font-family:Arial,sans-serif;padding:16px;background:${background};min-height:100vh;">`;
+  quotes.forEach(q => body += `<p style="font-style:italic;margin:8px 0;">"${q}"</p>`);
+  body += `<h2 style="color:red;">${isMorning ? 'DID YOU FINISH TASK YESTERDAY?' : 'FIGHT!!'}</h2>`;
+
+  // ===== タスクカード =====
+  body += `<div style="display:flex;border-radius:12px;background-color:#fff9e3;padding:16px;margin:12px 0;box-shadow:0 4px 12px rgba(0,0,0,0.2);">
+             <div style="width:8px;background-color:#7dd3fc;border-radius:4px 0 0 4px;margin-right:12px;"></div>
+             <div style="flex:1;">`;
+
+  // 午前は完了タスクにチェック、午後はすべて空チェック
+  TASKS.forEach(task => {
+    const mark = (completedTasks.has(task) && isMorning) ? '☑︎' : '☐';
+    body += `<div style="margin:6px 0;font-weight:bold;">${mark} ${task}</div>`;
+  });
+
+  if (isMorning) {
+    body += `<p><b>Yesterday's Completion Rate:</b> ${rate}%</p>`;
+  } else {
+    body += `<p style="font-weight:bold;color:#000000;">Keep pushing!!</p>`;
+  }
+
+  // MESSAGE 常に表示
+  body += `<div style="margin-top:12px;padding:12px;border-left:4px solid #facc15;background:#fff7ed;">
+             <h3 style="margin:0 0 6px 0;color:#b45309;">Message From Me:</h3>
+             <p style="margin:0;">${messageForTomorrow}</p>
+           </div>`;
+  body += '</div></div>'; // タスクカード閉じ
+
+  // Trusted News + ロゴ
+  body += '<hr>────────────────<br>Trusted News Sources<br>';
+  body += 'BBC       : https://www.bbc.com/news<br>';
+  body += 'CNN       : https://edition.cnn.com<br>';
+  body += 'Economist : https://www.economist.com<br>';
+  body += '────────────────<br>';
+  body += `<div style="text-align:center;margin-top:12px;">
+             <img src="https://i.imgur.com/MgBNZDH.png" alt="Logo" style="max-width:200px;opacity:0.85;">
+           </div>`;
+  body += '</div>';
+
+  // ===== Gmail送信 =====
+  GmailApp.sendEmail(
+    SEND_TO,
+    isMorning ? 'Daily Morning Task Reminder' : 'Daily Evening Task Reminder',
+    '',
+    { htmlBody: body }
+  );
+
+  // ===== Daily_Summary に常に記録 =====
+  summarySheet.appendRow([
+    Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
+    completedTasks.has('WALKING') ? 1 : 0,
+    completedTasks.has('PUSH-UP') ? 1 : 0,
+    completedTasks.has('ABS') ? 1 : 0,
+    completedTasks.has('CHECK NEWS') ? 1 : 0,
+    completedTasks.has('STUDY') ? 1 : 0,
+    completedTasks.has('CREATE VIDEO') ? 1 : 0,
+    completedCount,
+    rate,
+    messageForTomorrow
+  ]);
+}
